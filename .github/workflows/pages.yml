@@ -1,48 +1,51 @@
-name: Deploy Demo Pages
+name: Scanner Quant 6.8.4 — Demo pública
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node validate-demo.mjs
   deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: validate
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
         with:
-          enablement: true
-      - name: Incluir tickers pedidos no radar público
-        run: node ensure-extra-tickers.mjs
-      - name: Gerar validação histórica técnica
-        run: node build-backtests-v631.mjs
-      - name: Build demo pública
+          enablement: false
+      - name: Copiar apenas a demo sanitizada
         run: |
           mkdir -p _site
-          cp index.html demo-data.json demo-v621.js demo-v63.js demo-v631.js demo-v632.js backtest-data.json _site/
-          python - <<'PY'
-          from pathlib import Path
-          p=Path('_site/index.html')
-          s=p.read_text()
-          s=s.replace('</body>','<script src="./demo-v621.js"></script><script src="./demo-v63.js"></script><script src="./demo-v631.js"></script><script src="./demo-v632.js"></script></body>')
-          p.write_text(s)
-          PY
+          cp index.html demo-data.json _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
-      - name: Deploy to GitHub Pages
+      - name: Publicar no Pages existente
         id: deployment
         uses: actions/deploy-pages@v4
